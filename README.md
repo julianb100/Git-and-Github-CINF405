@@ -1,7 +1,7 @@
 # Git-and-Github-CINF405
 # Simple Calculator Program
 
-print("Welcome to the Simple Calculator!")
+print("Welcome to the GitHub Calculator created by Julian!")
 
 num1 = float(input("Enter the first number: "))
 num2 = float(input("Enter the second number: "))
