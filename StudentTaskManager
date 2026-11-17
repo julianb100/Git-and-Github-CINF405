@@ -1,7 +1,7 @@
 
 import json
 import os
-from datetime import datetime
+from datetime import datetime, date
 
 # Store all assignments
 assignments = []
@@ -17,8 +17,15 @@ def load_assignments():
     if os.path.exists(FILE_NAME):
         try:
             with open(FILE_NAME, "r") as file:
-                assignments = json.load(file)
-            print("Previous assignments loaded successfully!")
+                data = json.load(file)
+
+            if isinstance(data, list):
+                assignments = data
+                print("Previous assignments loaded successfully!")
+            else:
+                assignments = []
+                print("Invalid file format. Starting fresh.")
+
         except (json.JSONDecodeError, OSError):
             assignments = []
             print("Could not load saved assignments. Starting fresh.")
@@ -42,8 +49,36 @@ def show_menu():
     print("4. Delete assignment")
     print("5. Search assignments")
     print("6. View assignment statistics")
-    print("7. Save assignments")
-    print("8. Exit")
+    print("7. Edit assignment")
+    print("8. View overdue assignments")
+    print("9. Sort assignments")
+    print("10. Save assignments")
+    print("11. Exit")
+
+
+def get_valid_date(prompt):
+    """Ask the user for a valid date."""
+    due_date = input(prompt).strip()
+
+    try:
+        datetime.strptime(due_date, "%Y-%m-%d")
+        return due_date
+    except ValueError:
+        print("Invalid date. Please use YYYY-MM-DD.")
+        return None
+
+
+def get_valid_priority():
+    """Ask the user for a valid priority."""
+    priority = input(
+        "Enter priority (High, Medium, Low): "
+    ).strip().title()
+
+    if priority not in ["High", "Medium", "Low"]:
+        print("Invalid priority. Please use High, Medium, or Low.")
+        return None
+
+    return priority
 
 
 def add_assignment():
@@ -56,18 +91,14 @@ def add_assignment():
 
     description = input("Enter assignment description: ").strip()
 
-    due_date = input("Enter due date (YYYY-MM-DD): ").strip()
+    due_date = get_valid_date("Enter due date (YYYY-MM-DD): ")
 
-    try:
-        datetime.strptime(due_date, "%Y-%m-%d")
-    except ValueError:
-        print("Invalid date. Please use YYYY-MM-DD.")
+    if due_date is None:
         return
 
-    priority = input("Enter priority (High, Medium, Low): ").strip().title()
+    priority = get_valid_priority()
 
-    if priority not in ["High", "Medium", "Low"]:
-        print("Invalid priority. Please use High, Medium, or Low.")
+    if priority is None:
         return
 
     # Create a unique assignment ID
@@ -111,6 +142,15 @@ def view_assignments():
         print(f"Status: {status}")
 
 
+def find_assignment(task_id):
+    """Find an assignment using its ID."""
+    for task in assignments:
+        if task["id"] == task_id:
+            return task
+
+    return None
+
+
 def mark_completed():
     """Mark an assignment as completed."""
     view_assignments()
@@ -124,17 +164,18 @@ def mark_completed():
         print("Please enter a valid number.")
         return
 
-    for task in assignments:
-        if task["id"] == task_id:
-            if task["completed"]:
-                print("This assignment is already completed.")
-            else:
-                task["completed"] = True
-                save_assignments()
-                print("Assignment marked as completed!")
-            return
+    task = find_assignment(task_id)
 
-    print("Assignment ID not found.")
+    if task is None:
+        print("Assignment ID not found.")
+        return
+
+    if task["completed"]:
+        print("This assignment is already completed.")
+    else:
+        task["completed"] = True
+        save_assignments()
+        print("Assignment marked as completed!")
 
 
 def delete_assignment():
@@ -150,19 +191,23 @@ def delete_assignment():
         print("Please enter a valid number.")
         return
 
-    for task in assignments:
-        if task["id"] == task_id:
-            assignments.remove(task)
-            save_assignments()
-            print("Assignment deleted successfully!")
-            return
+    task = find_assignment(task_id)
 
-    print("Assignment ID not found.")
+    if task is None:
+        print("Assignment ID not found.")
+        return
+
+    assignments.remove(task)
+    save_assignments()
+
+    print("Assignment deleted successfully!")
 
 
 def search_assignments():
     """Search for assignments by title."""
-    search_term = input("\nEnter assignment title to search: ").strip().lower()
+    search_term = input(
+        "\nEnter assignment title to search: "
+    ).strip().lower()
 
     if not search_term:
         print("Search cannot be empty.")
@@ -193,20 +238,165 @@ def view_statistics():
     """Display assignment statistics."""
     total = len(assignments)
 
-    completed = sum(1 for task in assignments if task["completed"])
+    completed = sum(
+        1 for task in assignments if task["completed"]
+    )
 
     pending = total - completed
+
+    overdue = sum(
+        1 for task in assignments
+        if not task["completed"]
+        and datetime.strptime(
+            task["due_date"], "%Y-%m-%d"
+        ).date() < date.today()
+    )
 
     print("\n===== Assignment Statistics =====")
     print(f"Total Assignments: {total}")
     print(f"Completed Assignments: {completed}")
     print(f"Pending Assignments: {pending}")
+    print(f"Overdue Assignments: {overdue}")
 
     if total > 0:
         percentage = (completed / total) * 100
         print(f"Completion Rate: {percentage:.1f}%")
     else:
         print("Completion Rate: 0%")
+
+
+def edit_assignment():
+    """Edit an existing assignment."""
+    view_assignments()
+
+    if not assignments:
+        return
+
+    try:
+        task_id = int(input("\nEnter assignment ID to edit: "))
+    except ValueError:
+        print("Please enter a valid number.")
+        return
+
+    task = find_assignment(task_id)
+
+    if task is None:
+        print("Assignment ID not found.")
+        return
+
+    print("\nPress Enter to keep the current information.")
+
+    new_title = input(
+        f"New title ({task['title']}): "
+    ).strip()
+
+    if new_title:
+        task["title"] = new_title
+
+    new_description = input(
+        f"New description ({task['description']}): "
+    ).strip()
+
+    if new_description:
+        task["description"] = new_description
+
+    new_date = input(
+        f"New due date ({task['due_date']}): "
+    ).strip()
+
+    if new_date:
+        try:
+            datetime.strptime(new_date, "%Y-%m-%d")
+            task["due_date"] = new_date
+        except ValueError:
+            print("Invalid date. Keeping the original date.")
+
+    new_priority = input(
+        f"New priority ({task['priority']}): "
+    ).strip().title()
+
+    if new_priority:
+        if new_priority in ["High", "Medium", "Low"]:
+            task["priority"] = new_priority
+        else:
+            print("Invalid priority. Keeping the original priority.")
+
+    save_assignments()
+
+    print("Assignment updated successfully!")
+
+
+def view_overdue():
+    """Display assignments that are past their due dates."""
+    today = date.today()
+
+    overdue_tasks = [
+        task for task in assignments
+        if not task["completed"]
+        and datetime.strptime(
+            task["due_date"], "%Y-%m-%d"
+        ).date() < today
+    ]
+
+    if not overdue_tasks:
+        print("\nYou have no overdue assignments!")
+        return
+
+    print("\n===== Overdue Assignments =====")
+
+    for task in overdue_tasks:
+        print(f"\nID: {task['id']}")
+        print(f"Title: {task['title']}")
+        print(f"Due Date: {task['due_date']}")
+        print(f"Priority: {task['priority']}")
+
+
+def sort_assignments():
+    """Sort assignments by due date or priority."""
+    if not assignments:
+        print("\nNo assignments available to sort.")
+        return
+
+    print("\n===== Sort Assignments =====")
+    print("1. Sort by due date")
+    print("2. Sort by priority")
+
+    choice = input("Choose an option: ").strip()
+
+    if choice == "1":
+        sorted_tasks = sorted(
+            assignments,
+            key=lambda task: task["due_date"]
+        )
+
+    elif choice == "2":
+        priority_order = {
+            "High": 1,
+            "Medium": 2,
+            "Low": 3
+        }
+
+        sorted_tasks = sorted(
+            assignments,
+            key=lambda task: priority_order[task["priority"]]
+        )
+
+    else:
+        print("Invalid choice.")
+        return
+
+    print("\n===== Sorted Assignments =====")
+
+    for task in sorted_tasks:
+        status = "Completed" if task["completed"] else "Pending"
+
+        print(
+            f"\nID: {task['id']} | "
+            f"{task['title']} | "
+            f"Due: {task['due_date']} | "
+            f"Priority: {task['priority']} | "
+            f"Status: {status}"
+        )
 
 
 def main():
@@ -216,7 +406,7 @@ def main():
     while True:
         show_menu()
 
-        choice = input("\nChoose an option (1-8): ").strip()
+        choice = input("\nChoose an option (1-11): ").strip()
 
         if choice == "1":
             add_assignment()
@@ -237,16 +427,25 @@ def main():
             view_statistics()
 
         elif choice == "7":
+            edit_assignment()
+
+        elif choice == "8":
+            view_overdue()
+
+        elif choice == "9":
+            sort_assignments()
+
+        elif choice == "10":
             save_assignments()
             print("Assignments saved successfully!")
 
-        elif choice == "8":
+        elif choice == "11":
             save_assignments()
             print("Thank you for using Student Task Management!")
             break
 
         else:
-            print("Invalid choice. Please select a number from 1-8.")
+            print("Invalid choice. Please select a number from 1-11.")
 
 
 if __name__ == "__main__":
